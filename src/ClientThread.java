@@ -1,104 +1,106 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.net.*;
-import java.io.*;
+public class ClientThread implements Runnable {
 
-/**
- *
- * @author catalin
- */
-class ClientThread extends Thread
-{
-    private Socket socket;
-    private BufferedReader reader;
-    private BufferedOutputStream out;
-    private BufferedInputStream fileReader;
-    
-    public ClientThread(Socket socket)
-    {
-        this.socket = socket;
+    private Socket clientSocket;
+    private BufferedReader in = null;
+
+    public ClientThread(Socket client) {
+        this.clientSocket = client;
     }
-    
-    public void run()
-    {
-        try
-        {
-            //create the buffered reader
-            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            //create the output buffered reader
-            out = new BufferedOutputStream(socket.getOutputStream());
-            
-            //read the filename
-            String fileName = reader.readLine();
-            System.out.println("file name: " + fileName + " has been requested by " + socket.getInetAddress().getHostAddress());
-            File file = new File(fileName);
-            //String rootDirectory = "D:\\rootDirectory";
-            //File file = new File(rootDirectory + "" +file);
-            //verify that the file exists
-            if(!file.exists())
-            {
-                //if file does not exists send code 0 and close the connection
-                byte code = (byte)0;
-                out.write(code);
-                closeConnection();
-            }
-            else
-            {
-                //if the file exists send code 1 and send the file
-                out.write((byte)1);
-                //create a buffered input stream variable
-                fileReader = new BufferedInputStream(new FileInputStream(file));
-                //set the buffer size
-                byte[] buffer = new byte[1024];
-                //this integer is stores the 
-                int bytesRead = 0;
-                while ((bytesRead = fileReader.read(buffer)) != -1) {
-                    out.write(buffer, 0, bytesRead);
-                    //System.out.println(bytesRead);
-                    out.flush();
+
+    @Override
+    public void run() {
+        try {
+            in = new BufferedReader(new InputStreamReader(
+                    clientSocket.getInputStream()));
+            String clientSelection;
+            while ((clientSelection = in.readLine()) != null) {
+                switch (clientSelection) {
+                    case "1":
+                        receiveFile();
+                        break;
+                    case "2":
+                        String outGoingFileName;
+                        while ((outGoingFileName = in.readLine()) != null) {
+                            sendFile(outGoingFileName);
+                        }
+
+                        break;
+                    default:
+                        System.out.println("Incorrect command received.");
+                        break;
                 }
-                //close the connection after the download is finished
-                closeConnection();
+                in.close();
+                break;
             }
-            
-            
-        }
-        catch(Exception e)
-        {
-            System.out.println(e.toString());
+
+        } catch (IOException ex) {
+            Logger.getLogger(ClientThread.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
-    
-    public void closeConnection()
-    {
-        try
-        {
-            if(out!=null)
-            {
-                out.close();
+
+    public void receiveFile() {
+        try {
+            int bytesRead;
+
+            DataInputStream clientData = new DataInputStream(clientSocket.getInputStream());
+
+            String fileName = clientData.readUTF();
+            OutputStream output = new FileOutputStream(("received_from_client_" + fileName));
+            long size = clientData.readLong();
+            byte[] buffer = new byte[1024];
+            while (size > 0 && (bytesRead = clientData.read(buffer, 0, (int) Math.min(buffer.length, size))) != -1) {
+                output.write(buffer, 0, bytesRead);
+                size -= bytesRead;
             }
-            if(reader!=null)
-            {
-                reader.close();
-            }
-            if(fileReader!=null)
-            {
-                fileReader.close();
-            }
-            if(out!=null)
-            {
-                socket.close();
-            }
-        }
-        catch(Exception e)
-        {
-            System.out.println(e.toString());
+
+            output.close();
+            clientData.close();
+
+            System.out.println("File "+fileName+" received from client.");
+        } catch (IOException ex) {
+            System.err.println("Client error. Connection closed.");
         }
     }
-    
-    
+
+    public void sendFile(String fileName) {
+        try {
+            //handle file read
+            File myFile = new File(fileName);
+            byte[] mybytearray = new byte[(int) myFile.length()];
+
+            FileInputStream fis = new FileInputStream(myFile);
+            BufferedInputStream bis = new BufferedInputStream(fis);
+            //bis.read(mybytearray, 0, mybytearray.length);
+
+            DataInputStream dis = new DataInputStream(bis);
+            dis.readFully(mybytearray, 0, mybytearray.length);
+
+            //handle file send over socket
+            OutputStream os = clientSocket.getOutputStream();
+
+            //Sending file name and file size to the server
+            DataOutputStream dos = new DataOutputStream(os);
+            dos.writeUTF(myFile.getName());
+            dos.writeLong(mybytearray.length);
+            dos.write(mybytearray, 0, mybytearray.length);
+            dos.flush();
+            System.out.println("File "+fileName+" sent to client.");
+        } catch (Exception e) {
+            System.err.println("File does not exist!");
+        } 
+    }
 }

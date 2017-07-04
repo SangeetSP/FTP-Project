@@ -1,43 +1,34 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
 
-import java.io.*;
-import java.net.*;
+public class FTPServer {
 
-/**
- *
- * @author catalin
- */
-public class FTPServer 
-{
-    public static void main(String [] args)
-    {
-        try
-        {
-            //initialize the Server Socket class
-            ServerSocket serverSocket = new ServerSocket(9090);
-        
-            //boolean variable to stop the server
-            boolean isStopped = false;
-            while(!isStopped)
-            {
-                //create client socket object
-                Socket clientSocket = serverSocket.accept();
-                //create and start client thread
-                ClientThread clientThread = new ClientThread(clientSocket);
-                clientThread.start();
+    private static ServerSocket serverSocket;
+    private static Socket clientSocket = null;
+
+    public static void main(String[] args) throws IOException {
+
+        try {
+            serverSocket = new ServerSocket(4444);
+            System.out.println("Server started.");
+        } catch (Exception e) {
+            System.err.println("Port already in use.");
+            System.exit(1);
+        }
+
+        while (true) {
+            try {
+                clientSocket = serverSocket.accept();
+                System.out.println("Accepted connection : " + clientSocket);
+
+                Thread t = new Thread(new ClientThread(clientSocket));
+
+                t.start();
+
+            } catch (Exception e) {
+                System.err.println("Error in connection attempt.");
             }
-        }
-        catch(IOException e)
-        {
-            System.out.println("Port 9090 is already opened! Please use another port.");
-        }
-        catch(Exception e)
-        {
-            System.out.println(e.toString());
         }
     }
 }
